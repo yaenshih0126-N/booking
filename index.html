@@ -16,6 +16,7 @@
     </style>
 </head>
 <body class="p-4 md:p-8">
+    <!-- 讀取遮罩 -->
     <div id="loading" class="loading-overlay">
         <div class="flex flex-col items-center">
             <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
@@ -99,13 +100,19 @@
         </div>
     </div>
 
-    <!-- 彈窗訊息 -->
+    <!-- 摘要確認/訊息彈窗 -->
     <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 z-50">
-        <div class="bg-white p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl">
-            <div id="modalIcon" class="text-5xl mb-3">✅</div>
-            <h3 id="modalTitle" class="text-xl font-bold mb-2">訊息</h3>
-            <p id="modalMsg" class="text-gray-600 mb-6 whitespace-pre-line"></p>
-            <button id="modalBtn" onclick="closeModal()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition shadow-lg">確定</button>
+        <div class="bg-white p-6 rounded-2xl max-w-sm w-full shadow-2xl">
+            <div id="modalIcon" class="text-5xl mb-3 text-center">✅</div>
+            <h3 id="modalTitle" class="text-xl font-bold mb-2 text-center">訊息</h3>
+            <div id="modalContent" class="text-gray-600 mb-6 space-y-2">
+                <!-- 動態內容插入處 -->
+                <p id="modalMsg" class="text-center whitespace-pre-line"></p>
+            </div>
+            <div id="modalActions" class="flex gap-3">
+                <button id="modalSecondaryBtn" onclick="closeModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-bold transition hidden">取消</button>
+                <button id="modalBtn" onclick="closeModal()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition shadow-lg text-center">確定</button>
+            </div>
         </div>
     </div>
 
@@ -115,8 +122,8 @@
         import { getFirestore, doc, onSnapshot, collection, query, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // --- 重要：已更新為您的 Firebase Config ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+        // --- Firebase Config ---
+        const firebaseConfig = {
             apiKey: "AIzaSyCjcVEG4GXGkqPl-pjXrkzsm69A11eXXpE",
             authDomain: "mybooking-7fa2e.firebaseapp.com",
             projectId: "mybooking-7fa2e",
@@ -125,12 +132,11 @@
             appId: "1:1018514518020:web:176339c3b90097efb10551",
             measurementId: "G-05KFQVLLQ0"
         };
-        // -------------------------------------------------------
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'id-card-booking-v1';
+        const appId = 'id-card-booking-v1';
 
         const MAX_CAPACITY = 10;
         const startDate = new Date('2026-04-15');
@@ -140,6 +146,7 @@
         let selectedDate = '04-15';
         let currentUser = null;
 
+        // 初始化驗證
         async function initAuth() {
             try {
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -149,23 +156,17 @@
                 }
             } catch (error) {
                 console.error("Auth Error:", error);
-                document.getElementById('loading').innerHTML = `
-                    <div class="text-center p-8 bg-white rounded-xl shadow-lg">
-                        <p class="text-red-500 font-bold mb-4">⚠️ 連線初始化失敗</p>
-                        <p class="text-sm text-gray-500 mb-2">原因：Firebase 配置資訊未設定或不正確。</p>
-                        <p class="text-[10px] text-gray-400">請確認程式碼中的 firebaseConfig 是否已填入正確資訊。</p>
-                    </div>
-                `;
+                showInfoModal('連線失敗', '請確認 Firebase 控制台已啟用「匿名驗證」功能。', '❌');
             }
         }
 
         onAuthStateChanged(auth, (user) => {
             if (user) {
                 currentUser = user;
-                document.getElementById('connStatus').innerText = '已連線';
+                document.getElementById('connStatus').innerText = '已連線 (雲端同步中)';
                 startListening();
             } else {
-                document.getElementById('connStatus').innerText = '未連線';
+                document.getElementById('connStatus').innerText = '嘗試連線中...';
             }
         });
 
@@ -183,32 +184,47 @@
                 initDateTabs();
                 renderTimeSlots();
             }, (error) => {
-                console.error("Listen Error:", error);
-                showModal('連線錯誤', '無法同步雲端資料，請確認資料庫權限 (Rules) 是否已開啟。', '❌');
+                console.error("Firestore Error:", error);
+                showInfoModal('資料讀取失敗', '請確認 Firestore 規則 (Rules) 是否已設為允許讀寫。', '❌');
             });
         }
 
-        window.handleBooking = async function(slotID, timeRange, remaining) {
-            if (!currentUser) {
-                showModal('⚠️ 系統錯誤', '尚未建立雲端連線。', '❌');
-                return;
-            }
-
+        // --- 預約流程更新：加入摘要確認 ---
+        window.handleBooking = function(slotID, timeRange, remaining) {
             const dept = document.getElementById('dept').value;
             const name = document.getElementById('userName').value.trim();
             const requestedCount = parseInt(document.getElementById('personCount').value);
 
             if (!dept || !name) {
-                showModal('⚠️ 資料不全', '請先選擇部門並填寫聯絡主管姓名。', '🏢');
+                showInfoModal('⚠️ 資料不全', '請先選擇部門並填寫聯絡主管姓名。', '🏢');
                 return;
             }
             if (requestedCount > remaining) {
-                showModal('⚠️ 名額不足', `此時段僅剩 ${remaining} 個名額，無法一次預約 ${requestedCount} 人。`, '❌');
+                showInfoModal('⚠️ 名額不足', `此時段僅剩 ${remaining} 個名額，無法一次預約 ${requestedCount} 人。`, '❌');
                 return;
             }
 
-            document.getElementById('loading').style.display = 'flex';
+            // 跳出確認摘要
+            showConfirmModal({
+                title: '確認預約內容',
+                content: `
+                    <div class="bg-blue-50 p-4 rounded-lg text-left text-sm border border-blue-100">
+                        <p><strong>📅 預約日期：</strong>${selectedDate}</p>
+                        <p><strong>⏰ 預約時段：</strong>${timeRange}</p>
+                        <p><strong>🏢 預約部門：</strong>${dept}</p>
+                        <p><strong>👤 聯絡主管：</strong>${name}</p>
+                        <p class="text-blue-600 font-bold text-lg mt-2"><strong>👥 預約人數：</strong>${requestedCount} 人</p>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-4 text-center italic">※ 點擊「確認送出」後將無法線上更改</p>
+                `,
+                icon: '📝',
+                onConfirm: () => submitBooking(slotID, timeRange, dept, name, requestedCount)
+            });
+        };
 
+        // 實際執行寫入資料庫
+        async function submitBooking(slotID, timeRange, dept, name, requestedCount) {
+            document.getElementById('loading').style.display = 'flex';
             try {
                 const bookingsCol = collection(db, 'artifacts', appId, 'public', 'data', 'bookings');
                 const promises = [];
@@ -224,14 +240,66 @@
                     }));
                 }
                 await Promise.all(promises);
-                showModal('預約成功', `已成功預約 ${selectedDate} ${timeRange}\n共 ${requestedCount} 位名額。`, '✅');
+                showInfoModal('預約成功', `已完成預約！\n時段：${selectedDate} ${timeRange}\n人數：${requestedCount} 人`, '✅');
             } catch (error) {
-                showModal('預約失敗', '寫入失敗，請檢查資料庫權限。', '❌');
+                console.error("Write Error:", error);
+                showInfoModal('預約失敗', '無法寫入資料，請檢查網路連線或資料庫權限。', '❌');
             } finally {
                 document.getElementById('loading').style.display = 'none';
             }
-        };
+        }
 
+        // --- 彈窗系統輔助函數 ---
+        window.closeModal = () => document.getElementById('modal').classList.add('hidden');
+
+        // 提示型彈窗 (單按鈕)
+        function showInfoModal(title, msg, icon) {
+            const modal = document.getElementById('modal');
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalMsg').innerText = msg;
+            document.getElementById('modalMsg').classList.remove('hidden');
+            document.getElementById('modalIcon').innerText = icon;
+            document.getElementById('modalSecondaryBtn').classList.add('hidden');
+            
+            // 移除舊內容
+            const customContent = document.getElementById('modalCustomContent');
+            if(customContent) customContent.remove();
+
+            const btn = document.getElementById('modalBtn');
+            btn.innerText = '確定';
+            btn.onclick = closeModal;
+            modal.classList.remove('hidden');
+        }
+
+        // 確認型彈窗 (雙按鈕 + 摘要內容)
+        function showConfirmModal({title, content, icon, onConfirm}) {
+            const modal = document.getElementById('modal');
+            document.getElementById('modalTitle').innerText = title;
+            document.getElementById('modalMsg').classList.add('hidden'); // 隱藏純文字區域
+            document.getElementById('modalIcon').innerText = icon;
+            
+            // 清除並插入自定義 HTML 內容
+            const contentArea = document.getElementById('modalContent');
+            const oldCustom = document.getElementById('modalCustomContent');
+            if(oldCustom) oldCustom.remove();
+            
+            const div = document.createElement('div');
+            div.id = 'modalCustomContent';
+            div.innerHTML = content;
+            contentArea.appendChild(div);
+
+            // 設定按鈕
+            document.getElementById('modalSecondaryBtn').classList.remove('hidden');
+            const confirmBtn = document.getElementById('modalBtn');
+            confirmBtn.innerText = '確認送出';
+            confirmBtn.onclick = () => {
+                closeModal();
+                onConfirm();
+            };
+            modal.classList.remove('hidden');
+        }
+
+        // --- 介面渲染函數 ---
         function initDateTabs() {
             const tabs = document.getElementById('dateTabs');
             if (tabs.children.length > 0) return; 
@@ -300,7 +368,7 @@
         }
 
         window.exportData = function() {
-            if (allBookings.length === 0) { showModal('提示', '目前尚無預約資料。', 'ℹ️'); return; }
+            if (allBookings.length === 0) { showInfoModal('提示', '目前尚無預約資料。', 'ℹ️'); return; }
             let csvContent = "\uFEFF日期,時間,部門,員工姓名,預約主管\n";
             [...allBookings].sort((a,b) => a.slotID.localeCompare(b.slotID)).forEach(b => {
                 csvContent += `${b.slotID.split('_')[0]},${b.timeRange},"${b.dept}","${b.name}","${b.manager}"\n`;
@@ -312,13 +380,6 @@
         };
 
         function formatDate(date) { return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
-        window.closeModal = () => document.getElementById('modal').classList.add('hidden');
-        function showModal(title, msg, icon) {
-            document.getElementById('modalTitle').innerText = title;
-            document.getElementById('modalMsg').innerText = msg;
-            document.getElementById('modalIcon').innerText = icon;
-            document.getElementById('modal').classList.remove('hidden');
-        }
 
         initAuth();
     </script>
