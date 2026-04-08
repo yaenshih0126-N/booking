@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>識別證照片拍攝預約系統</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        select { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+    <div id="root"></div>
+
+    <!-- Firebase SDK Loader (Module 模式避免與 Babel 衝突) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase 配置區
+        // 提示：如果你將此檔案下載至本地，請將下方的 config 內容替換成你自己的 Firebase 專案金鑰
+        const rawConfig = '__firebase_config';
+        let firebaseConfig = {
+            apiKey: "",
+            authDomain: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: ""
+        };
+
+        try {
+            if (rawConfig && !rawConfig.startsWith('__')) {
+                firebaseConfig = JSON.parse(rawConfig);
+            }
+        } catch (e) { console.error("Config Error", e); }
+
+        if (!firebaseConfig.apiKey) {
+            window.firebaseConfigError = "尚未偵測到 Firebase 配置，請在程式碼中填入 apiKey 等資訊。";
+            window.dispatchEvent(new Event('firebase-ready'));
+        } else {
+            try {
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                const db = getFirestore(app);
+
+                // 將功能掛載至 window 供 React 使用
+                window.FirebaseLib = { 
+                    auth, db, collection, onSnapshot, addDoc, serverTimestamp, signInAnonymously, onAuthStateChanged 
+                };
+                window.appId = typeof __app_id !== 'undefined' ? __app_id : 'photo-booking-v2';
+                window.dispatchEvent(new Event('firebase-ready'));
+            } catch (err) {
+                window.firebaseConfigError = "Firebase 初始化失敗：" + err.message;
+                window.dispatchEvent(new Event('firebase-ready'));
+            }
+        }
+    </script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        const SLOT_LIMIT = 10;
+        const WEEKDAYS = ["日", "一", "二", "三", "四", "五", "六"];
+        const ALLOWED_DAYS = [2, 3, 4]; // 週二三四
+        
+        const DEPARTMENTS = [
+            "COM-區域業務一部 - 內湖 (ETP)", "CS-顧客服務部一組 (CCC)", "CS-顧客服務部二組 (CCC)",
+            "CS-顧客服務部三組 (CCC)", "CS-顧客服務部四組 (CCC)", "CS-顧客關係部一組 (CCD)",
+            "CS-顧客關係部二組 (CCD)", "CS-顧客服務發展部 (CSD)", "CS-主要客戶服務部一組 (KAS)",
+            "CS-主要客戶服務部二組 (KAS)", "FIN-帳單及帳務查詢部 - 帳務查詢組 (BLL&QH)",
+            "FIN-帳單及帳務查詢部 - 帳務管理組 (BLL&QH)", "FIN-帳務催收部一組 (CC&AR)",
+            "FIN-帳務催收部二組 (CC&AR)", "GBS-採購部 (CPD)", "GBS-總務部 (CRE)",
+            "IT-客戶資訊科技部 (CFI)", "IT-技術服務管理部 - 資訊服務組 (HD)", "IT-技術服務管理部 (SM)",
+            "OPS-GTW報關部 - B2B-6 (ICC)", "OPS-GTW報關部 - B2B-T1 (ICC)", "OPS-GTW報關部 - B2C (ICC)"
+        ];
+
+        function App() {
+            const [fbStatus, setFbStatus] = useState({ ready: !!window.FirebaseLib, error: window.firebaseConfigError });
+            const [user, setUser] = useState(null);
+            const [bookings, setBookings] = useState([]);
+            const [formData, setFormData] = useState({ name: '', department: '', date: '', slotId: '', personCount: 1 });
+            const [loading, setLoading] = useState(true);
+            const [submitting, setSubmitting] = useState(false);
+            const [message, setMessage] = useState({ type: '', text: '' });
+
+            useEffect(() => {
+                const handleReady = () => setFbStatus({ ready: !!window.FirebaseLib, error: window.firebaseConfigError });
+                window.addEventListener('firebase-ready', handleReady);
+                return () => window.removeEventListener('firebase-ready', handleReady);
+            }, []);
+
+            useEffect(() => {
+                if (!fbStatus.ready || fbStatus.error) {
+                    if (fbStatus.error) setLoading(false);
+                    return;
+                }
+                const { auth, signInAnonymously, onAuthStateChanged } = window.FirebaseLib;
+                signInAnonymously(auth).catch(() => setFbStatus(p => ({...p, error: '登入失敗'})));
+                return onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false); });
+            }, [fbStatus]);
+
+            useEffect(() => {
+                if (!user || !fbStatus.ready) return;
+                const { db, collection, onSnapshot } = window.FirebaseLib;
+                const q = collection(db, 'artifacts', window.appId, 'public', 'data', 'bookings');
+                return onSnapshot(q, (snap) => {
+                    setBookings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                });
+            }, [user, fbStatus]);
+
+            const availableDates = useMemo(() => {
+                const dates = [];
+                for (let d = 15; d <= 23; d++) {
+                    const current = new Date(2026, 3, d);
+                    if (ALLOWED_DAYS.includes(current.getDay())) {
+                        dates.push({ value: `2026-04-${d}`, display: `${current.getMonth() + 1}/${d} (${WEEKDAYS[current.getDay()]})` });
+                    }
+                }
+                return dates;
+            }, []);
+
+            const timeSlots = useMemo(() => {
+                const slots = [];
+                const addRange = (h1, h2) => {
+                    for (let h = h1; h < h2; h++) {
+                        for (let m of [0, 20, 40]) {
+                            const t = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+                            slots.push({ id: t, label: t });
+                        }
+                    }
+                };
+                addRange(10, 11);
+                addRange(14, 15);
+                return slots;
+            }, []);
+
+            const getCount = (date, tid) => bookings.filter(b => b.date === date && b.slotId === tid).length;
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (submitting) return;
+                setSubmitting(true);
+                const { db, collection, addDoc, serverTimestamp } = window.FirebaseLib;
+                try {
+                    if (getCount(formData.date, formData.slotId) >= SLOT_LIMIT) throw new Error("額滿了！");
+                    await addDoc(collection(db, 'artifacts', window.appId, 'public', 'data', 'bookings'), {
+                        ...formData, createdAt: serverTimestamp()
+                    });
+                    setFormData(p => ({ ...p, slotId: '' }));
+                    setMessage({ type: 'success', text: '預約成功！' });
+                } catch (err) {
+                    setMessage({ type: 'error', text: err.message });
+                } finally {
+                    setSubmitting(false);
+                    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+                }
+            };
+
+            if (fbStatus.error) return (
+                <div className="flex items-center justify-center min-h-screen p-6">
+                    <div className="bg-white p-8 rounded-3xl shadow-xl border border-rose-100 text-center max-w-sm">
+                        <div className="text-rose-500 font-black text-4xl mb-4">!</div>
+                        <h2 className="text-xl font-bold mb-2">需要配置</h2>
+                        <p className="text-slate-500 text-sm">{fbStatus.error}</p>
+                    </div>
+                </div>
+            );
+
+            if (loading) return <div className="flex items-center justify-center min-h-screen text-blue-600 font-bold">載入中...</div>;
+
+            return (
+                <div className="max-w-6xl mx-auto p-6">
+                    <nav className="flex justify-between items-center mb-10">
+                        <h1 className="text-2xl font-black text-blue-600">識別證預約系統</h1>
+                        <button onClick={() => {
+                            const csv = "\ufeff日期,時段,部門,姓名\n" + bookings.map(b => `${b.date},${b.slotId},${b.department},${b.name}`).join("\n");
+                            const blob = new Blob([csv], { type: 'text/csv' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url; a.download = '預約名單.csv'; a.click();
+                        }} className="bg-slate-900 text-white px-6 py-2 rounded-full font-bold text-sm hover:bg-slate-800 transition-all">匯出 CSV</button>
+                    </nav>
+
+                    <div className="grid lg:grid-cols-2 gap-10">
+                        {/* 填寫區 */}
+                        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+                            <h2 className="text-xl font-black mb-6">填寫預約</h2>
+                            <form onSubmit={handleSubmit} className="space-y-5">
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-400">部門</label>
+                                    <select required className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold" value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})}>
+                                        <option value="">請選擇...</option>
+                                        {DEPARTMENTS.map(d => <option key={d} value={d}>{d}</option>)}
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-400">姓名</label>
+                                    <input required type="text" className="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none font-bold" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="請輸入姓名" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-400">日期</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {availableDates.map(d => (
+                                            <button key={d.value} type="button" onClick={() => setFormData({...formData, date: d.value})} className={`p-3 rounded-xl font-bold text-sm transition-all ${formData.date === d.value ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}>
+                                                {d.display}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                {formData.date && (
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-bold text-slate-400">梯次</label>
+                                        <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                                            {timeSlots.map(s => {
+                                                const c = getCount(formData.date, s.id);
+                                                const full = c >= SLOT_LIMIT;
+                                                return (
+                                                    <button key={s.id} disabled={full} type="button" onClick={() => setFormData({...formData, slotId: s.id})} className={`p-3 rounded-xl font-bold text-xs transition-all ${formData.slotId === s.id ? 'bg-blue-600 text-white' : full ? 'bg-slate-100 text-slate-300' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}>
+                                                        {s.label}<br/><span className="text-[10px] opacity-60">{full ? '額滿' : `剩 ${SLOT_LIMIT-c}`}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                                <button disabled={!formData.slotId || submitting} className="w-full bg-blue-600 text-white p-4 rounded-2xl font-black shadow-lg disabled:opacity-30 active:scale-95 transition-all">
+                                    {submitting ? '處理中...' : '提交預約'}
+                                </button>
+                            </form>
+                        </div>
+
+                        {/* 名單區 */}
+                        <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
+                            <h2 className="text-xl font-black mb-6">已預約名單 ({bookings.length})</h2>
+                            <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
+                                {bookings.length === 0 ? <p className="text-center py-20 text-slate-300 font-bold italic">尚無預約</p> : (
+                                    [...bookings].sort((a,b) => (a.date+a.slotId).localeCompare(b.date+b.slotId)).map(b => (
+                                        <div key={b.id} className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center">
+                                            <div>
+                                                <div className="font-black text-slate-800 text-sm">{b.department}</div>
+                                                <div className="text-[10px] text-slate-400 font-bold mt-1">
+                                                    {b.date} / {b.slotId} / {b.name}
+                                                </div>
+                                            </div>
+                                            <div className="bg-white px-3 py-1 rounded-full text-[10px] font-black shadow-sm text-blue-600 uppercase">Booked</div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {message.text && (
+                        <div className={`fixed bottom-10 left-1/2 -translate-x-1/2 px-10 py-4 rounded-full text-white font-black shadow-2xl transition-all ${message.type === 'success' ? 'bg-slate-900' : 'bg-rose-500'}`}>
+                            {message.text}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
