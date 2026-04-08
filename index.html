@@ -115,15 +115,15 @@
         import { getFirestore, doc, onSnapshot, collection, query, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // --- 重要：請將下方的配置替換為您自己的 Firebase Config ---
-        // 您可以在 Firebase Console -> 專案設定 -> 一般 -> 您的應用程式 中找到
+        // --- 重要：已更新為您的 Firebase Config ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyCjcVEG4GXGkqPl-pjXrkzsm69A11eXXpE",
             authDomain: "mybooking-7fa2e.firebaseapp.com",
             projectId: "mybooking-7fa2e",
             storageBucket: "mybooking-7fa2e.firebasestorage.app",
             messagingSenderId: "1018514518020",
-            appId: "1:1018514518020:web:176339c3b90097efb10551"
+            appId: "1:1018514518020:web:176339c3b90097efb10551",
+            measurementId: "G-05KFQVLLQ0"
         };
         // -------------------------------------------------------
 
