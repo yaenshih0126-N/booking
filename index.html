@@ -197,7 +197,7 @@
             const requestedCount = parseInt(document.getElementById('personCount').value);
 
             if (!dept || !name) {
-                showInfoModal('⚠️ 資料不全', '請先選擇部門並填寫聯絡主管姓名。', '🏢');
+                showInfoModal('⚠️ 資料不全', '請先選擇部門並填寫聯絡窗口員工編號。', '🏢');
                 return;
             }
             if (requestedCount > remaining) {
@@ -213,7 +213,7 @@
                         <p><strong>📅 預約日期：</strong>${selectedDate}</p>
                         <p><strong>⏰ 預約時段：</strong>${timeRange}</p>
                         <p><strong>🏢 預約部門：</strong>${dept}</p>
-                        <p><strong>👤 聯絡主管：</strong>${name}</p>
+                        <p><strong>👤 聯絡窗口員工編號：</strong>${name}</p>
                         <p class="text-blue-600 font-bold text-lg mt-2"><strong>👥 預約人數：</strong>${requestedCount} 人</p>
                     </div>
                     <p class="text-xs text-gray-400 mt-4 text-center italic">※ 點擊「確認送出」後將無法線上更改</p>
