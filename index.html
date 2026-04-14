@@ -65,8 +65,8 @@
                         </select>
                     </div>
                     <div class="md:col-span-1">
-                        <label class="block text-sm font-bold text-gray-700 mb-1">聯絡人/主管姓名</label>
-                        <input type="text" id="userName" placeholder="請輸入姓名" class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                        <label class="block text-sm font-bold text-gray-700 mb-1">聯絡人/主管職編</label>
+                        <input type="text" id="userStaffId" placeholder="請輸入職編" class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                     </div>
                     <div class="md:col-span-1">
                         <label class="block text-sm font-bold text-gray-700 mb-1">預約拍攝人數</label>
@@ -222,11 +222,11 @@
 
         window.handleBooking = function(slotID, timeRange, remaining) {
             const dept = document.getElementById('dept').value;
-            const name = document.getElementById('userName').value.trim();
+            const staffId = document.getElementById('userStaffId').value.trim();
             const requestedCount = parseInt(document.getElementById('personCount').value);
 
-            if (!dept || !name) {
-                showInfoModal('⚠️ 資料不全', '請先選擇部門並填寫聯絡主管姓名。', '🏢');
+            if (!dept || !staffId) {
+                showInfoModal('⚠️ 資料不全', '請先選擇部門並填寫聯絡人職編。', '🏢');
                 return;
             }
             if (requestedCount > remaining) {
@@ -241,16 +241,16 @@
                         <p><strong>📅 預約日期：</strong>${selectedDate}</p>
                         <p><strong>⏰ 預約時段：</strong>${timeRange}</p>
                         <p><strong>🏢 預約部門：</strong>${dept}</p>
-                        <p><strong>👤 聯絡主管：</strong>${name}</p>
+                        <p><strong>🆔 聯絡職編：</strong>${staffId}</p>
                         <p class="text-blue-600 font-bold text-lg mt-2"><strong>👥 預約人數：</strong>${requestedCount} 人</p>
                     </div>
                 `,
                 icon: '📝',
-                onConfirm: () => submitBooking(slotID, timeRange, dept, name, requestedCount)
+                onConfirm: () => submitBooking(slotID, timeRange, dept, staffId, requestedCount)
             });
         };
 
-        async function submitBooking(slotID, timeRange, dept, name, requestedCount) {
+        async function submitBooking(slotID, timeRange, dept, staffId, requestedCount) {
             document.getElementById('loading').style.display = 'flex';
             try {
                 const bookingsCol = collection(db, 'artifacts', appId, 'public', 'data', 'bookings');
@@ -260,8 +260,9 @@
                         slotID,
                         timeRange,
                         dept,
-                        name: `${name}${requestedCount > 1 ? ` (${i+1})` : ''}`,
-                        manager: name,
+                        // 考量到多位預約，我們依然在內部紀錄中標註順序，但不存姓名
+                        staffId: `${staffId}${requestedCount > 1 ? `-${i+1}` : ''}`,
+                        managerId: staffId,
                         createdAt: serverTimestamp(),
                         userId: currentUser.uid
                     }));
@@ -378,31 +379,30 @@
             document.getElementById('totalStats').innerText = allBookings.length;
         }
 
-        // --- 匯出功能更新：加入「系統預約時間」 ---
+        // --- 匯出功能更新：同步修改職編欄位 ---
         window.exportData = function() {
             if (allBookings.length === 0) { showInfoModal('提示', '目前尚無預約資料。', 'ℹ️'); return; }
             
-            // CSV 表頭
-            let csvContent = "\uFEFF拍攝日期,拍攝時段,部門,員工姓名,預約主管,系統操作預約時間\n";
+            // CSV 表頭：將姓名改為職編
+            let csvContent = "\uFEFF拍攝日期,拍攝時段,部門,員工職編,預約人職編,系統操作預約時間\n";
             
             // 排序：先按拍攝日期，再按拍攝時段
             const sortedBookings = [...allBookings].sort((a,b) => a.slotID.localeCompare(b.slotID));
             
             sortedBookings.forEach(b => {
-                // 處理 createdAt 轉換為易讀格式
                 let createdTimeStr = "未知";
                 if (b.createdAt && b.createdAt.seconds) {
                     const date = new Date(b.createdAt.seconds * 1000);
-                    // 格式化為 YYYY/MM/DD HH:mm:ss
                     createdTimeStr = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
                 }
                 
-                csvContent += `${b.slotID.split('_')[0]},${b.timeRange},"${b.dept}","${b.name}","${b.manager}",${createdTimeStr}\n`;
+                // 使用 staffId 與 managerId 代替姓名
+                csvContent += `${b.slotID.split('_')[0]},${b.timeRange},"${b.dept}","${b.staffId || ''}","${b.managerId || ''}",${createdTimeStr}\n`;
             });
             
             const link = document.createElement("a");
             link.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
-            link.download = `預約清單_${formatDate(new Date())}.csv`;
+            link.download = `預約清單(去識別化)_${formatDate(new Date())}.csv`;
             link.click();
         };
 
