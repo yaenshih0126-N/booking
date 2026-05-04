@@ -1,412 +1,549 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>員工識別證拍攝預約系統 (雲端同步版)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
-        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f3f4f6; }
-        .slot-card { transition: all 0.2s; }
-        .slot-card:not(.disabled):hover { transform: translateY(-2px); border-color: #3b82f6; }
-        .disabled { opacity: 0.5; cursor: not-allowed; background-color: #e5e7eb; }
-        select { appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em; }
-        .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 100; }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>識別證拍照預約系統</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #F7F5F0;
+    --surface: #FFFFFF;
+    --surface2: #F0EDE8;
+    --border: #E0DDD8;
+    --border-strong: #C8C4BE;
+    --text: #1A1917;
+    --text-secondary: #6B6760;
+    --text-hint: #A09D99;
+    --blue: #2563EB;
+    --blue-light: #EFF6FF;
+    --red: #DC2626;
+    --red-light: #FEF2F2;
+    --green: #16A34A;
+    --green-light: #F0FDF4;
+    --amber: #D97706;
+    --amber-light: #FFFBEB;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.10), 0 2px 6px rgba(0,0,0,0.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 15px; }
+
+  .page-header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 18px 32px; display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 50;
+  }
+  .page-header h1 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+  .page-header p { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+  .btn-report {
+    display: flex; align-items: center; gap: 7px;
+    background: var(--text); color: #fff; border: none;
+    border-radius: var(--radius-sm); padding: 8px 16px;
+    font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; transition: opacity 0.15s;
+  }
+  .btn-report:hover { opacity: 0.82; }
+
+  .main { max-width: 720px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  .sync-bar {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 8px 14px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text-secondary); margin-bottom: 20px;
+  }
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0; animation: pulse 2.5s infinite; }
+  .sync-dot.error { background: var(--red); animation: none; }
+  .sync-dot.loading { background: var(--amber); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px 22px; margin-bottom: 18px; }
+  .card-title { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .card-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+  .form-group select, .form-group input {
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: 9px 12px; font-size: 14px; font-family: inherit;
+    color: var(--text); background: var(--surface); transition: border-color 0.15s, box-shadow 0.15s; width: 100%;
+  }
+  .form-group select:focus, .form-group input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,0.12); }
+
+  .period-label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-hint); margin: 14px 0 8px; }
+  .slots-list { display: flex; flex-direction: column; gap: 9px; }
+
+  .slot-item {
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 13px 16px; display: flex; align-items: center; gap: 14px;
+    cursor: pointer; background: var(--surface);
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s; user-select: none;
+  }
+  .slot-item:hover:not(.slot-full) { border-color: var(--border-strong); box-shadow: var(--shadow); }
+  .slot-item.slot-selected { border-color: var(--blue); background: var(--blue-light); box-shadow: 0 0 0 2px rgba(37,99,235,0.15); }
+  .slot-item.slot-full { opacity: 0.5; cursor: not-allowed; background: var(--surface2); }
+
+  .slot-time { font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500; color: var(--text); min-width: 108px; flex-shrink: 0; }
+  .slot-progress-wrap { flex: 1; }
+  .slot-progress-track { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; margin-bottom: 5px; }
+  .slot-progress-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; background: var(--blue); }
+  .slot-progress-fill.nearly { background: var(--amber); }
+  .slot-progress-fill.full { background: var(--red); }
+  .slot-info { font-size: 11px; color: var(--text-secondary); }
+  .slot-right { min-width: 110px; text-align: right; flex-shrink: 0; }
+  .slot-full-badge { font-size: 11px; font-weight: 500; color: var(--red); background: var(--red-light); padding: 3px 10px; border-radius: 20px; display: inline-block; }
+  .count-select { border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 5px 8px; font-size: 13px; font-family: 'DM Mono', monospace; color: var(--text); background: var(--surface); cursor: pointer; }
+
+  .submit-btn {
+    width: 100%; padding: 13px; background: var(--text); color: #fff;
+    border: none; border-radius: var(--radius-sm); font-size: 15px;
+    font-weight: 700; font-family: inherit; cursor: pointer;
+    letter-spacing: 0.02em; transition: opacity 0.15s, transform 0.1s;
+  }
+  .submit-btn:hover:not(:disabled) { opacity: 0.85; }
+  .submit-btn:active:not(:disabled) { transform: scale(0.99); }
+  .submit-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(20,18,16,0.5);
+    backdrop-filter: blur(2px); display: flex; align-items: center;
+    justify-content: center; z-index: 200; padding: 20px;
+    opacity: 0; transition: opacity 0.2s; pointer-events: none;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-md);
+    width: 100%; max-width: 420px; padding: 28px 26px 24px;
+    transform: translateY(12px); transition: transform 0.2s;
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .modal-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .modal-row:last-of-type { border-bottom: none; }
+  .modal-row-label { color: var(--text-secondary); }
+  .modal-row-val { font-weight: 500; text-align: right; }
+  .modal-highlight { background: var(--blue-light); border-radius: var(--radius-sm); padding: 12px 14px; margin: 14px 0; font-size: 14px; color: var(--blue); font-weight: 500; text-align: center; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .btn-cancel { flex: 1; padding: 10px; background: var(--surface2); color: var(--text); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); font-size: 14px; font-family: inherit; cursor: pointer; transition: background 0.15s; }
+  .btn-cancel:hover { background: var(--border); }
+  .btn-confirm { flex: 2; padding: 10px; background: var(--text); color: #fff; border: none; border-radius: var(--radius-sm); font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; transition: opacity 0.15s; }
+  .btn-confirm:hover:not(:disabled) { opacity: 0.82; }
+  .btn-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .report-modal { max-width: 680px; max-height: 88vh; display: flex; flex-direction: column; }
+  .report-body { overflow-y: auto; flex: 1; padding-right: 2px; }
+  .report-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 12px; }
+  .report-table th { text-align: left; padding: 8px 12px; background: var(--surface2); border-bottom: 1px solid var(--border); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+  .report-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .report-table tr:last-child td { border-bottom: none; }
+  .report-table tr:hover td { background: var(--surface2); }
+
+  .report-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat-card { background: var(--surface2); border-radius: var(--radius-sm); padding: 12px 14px; text-align: center; }
+  .stat-card .stat-num { font-size: 22px; font-weight: 700; margin-bottom: 2px; }
+  .stat-card .stat-label { font-size: 11px; color: var(--text-secondary); }
+
+  .btn-export { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); border-radius: var(--radius-sm); padding: 7px 14px; font-size: 13px; font-family: inherit; cursor: pointer; transition: background 0.15s; }
+  .btn-export:hover { background: var(--surface2); }
+
+  .pct-bar { width: 70px; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-right: 6px; }
+  .pct-bar-fill { height: 100%; border-radius: 3px; background: var(--blue); }
+  .pct-bar-fill.nearly { background: var(--amber); }
+  .pct-bar-fill.full { background: var(--red); }
+
+  .toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--text); color: #fff; padding: 10px 22px; border-radius: 20px; font-size: 14px; font-weight: 500; opacity: 0; transition: opacity 0.25s, transform 0.25s; pointer-events: none; z-index: 999; white-space: nowrap; box-shadow: var(--shadow-md); }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .footnote { text-align: center; font-size: 12px; color: var(--text-hint); margin-top: 18px; }
+
+  .skeleton { background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: var(--radius-sm); height: 60px; }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+</style>
 </head>
-<body class="p-4 md:p-8">
-    <!-- 讀取遮罩 -->
-    <div id="loading" class="loading-overlay">
-        <div class="flex flex-col items-center">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-            <p class="text-blue-600 font-medium">連線至雲端資料庫中...</p>
-        </div>
+<body>
+
+<header class="page-header">
+  <div>
+    <h1>識別證拍照預約系統</h1>
+    <p>每時段 30 分鐘・最多 10 人・請主管協助部門同事完成預約</p>
+  </div>
+  <button class="btn-report" onclick="openReport()">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="1" width="12" height="14" rx="2" stroke="#fff" stroke-width="1.4"/><path d="M5 5h6M5 8h6M5 11h4" stroke="#fff" stroke-width="1.4" stroke-linecap="round"/></svg>
+    預約報表
+  </button>
+</header>
+
+<main class="main">
+  <div class="sync-bar">
+    <span class="sync-dot loading" id="sync-dot"></span>
+    <span id="sync-label">連線中…</span>
+  </div>
+
+  <div class="card">
+    <div class="card-title">填寫預約資訊</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>預約部門</label>
+        <select id="dept">
+          <option value="">請選擇部門</option>
+          <option>人力資源部</option>
+          <option>財務部</option>
+          <option>資訊技術部</option>
+          <option>業務部</option>
+          <option>行銷部</option>
+          <option>研發部</option>
+          <option>法務部</option>
+          <option>行政部</option>
+          <option>採購部</option>
+          <option>客服部</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>填寫人職編</label>
+        <input type="text" id="emp-id" placeholder="例：A12345" maxlength="12" />
+      </div>
     </div>
+  </div>
 
-    <div class="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden">
-        <!-- 頁首 -->
-        <div class="bg-blue-600 p-6 text-white text-center">
-            <h1 class="text-2xl font-bold">員工識別證拍攝預約系統</h1>
-            <p class="mt-2 opacity-90">雲端即時同步版：5/19 - 5/21 & 5/26 - 5/28</p>
-            <p class="text-sm opacity-80">各時段上限 10 人，主管可一次為多名同仁預約</p>
-        </div>
-
-        <div class="p-6">
-            <!-- 填寫資料區 -->
-            <div class="bg-blue-50 p-6 rounded-lg border border-blue-100 mb-8">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div class="md:col-span-1">
-                        <label class="block text-sm font-bold text-gray-700 mb-1">部門名稱</label>
-                        <select id="dept" class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white">
-                            <option value="">請選擇部門...</option>
-                            <option>COM-區域業務一部 - 內湖 (ETP)</option>
-                            <option>CS-顧客服務部一組 (CCC)</option>
-                            <option>CS-顧客服務部二組 (CCC)</option>
-                            <option>CS-顧客服務部三組 (CCC)</option>
-                            <option>CS-顧客服務部四組 (CCC)</option>
-                            <option>CS-顧客關係部一組 (CCD)</option>
-                            <option>CS-顧客關係部二組 (CCD)</option>
-                            <option>CS-顧客服務發展部 (CSD)</option>
-                            <option>CS-主要客戶服務部一組 (KAS)</option>
-                            <option>CS-主要客戶服務部二組 (KAS)</option>
-                            <option>FIN-帳單及帳務查詢部 - 帳務查詢組 (BLL&QH)</option>
-                            <option>FIN-帳單及帳務查詢部 - 帳務管理組 (BLL&QH)</option>
-                            <option>FIN-帳務催收部一組 (CC&AR)</option>
-                            <option>FIN-帳務催收部二組 (CC&AR)</option>
-                            <option>GBS-採購部 (CPD)</option>
-                            <option>GBS-總務部 (CRE)</option>
-                            <option>IT-客戶資訊科技部 (CFI)</option>
-                            <option>IT-技術服務管理部 - 資訊服務組 (HD)</option>
-                            <option>IT-技術服務管理部 (SM)</option>
-                            <option>OPS-GTW報關部 - B2B-6 (ICC)</option>
-                            <option>OPS-GTW報關部 - B2B-T1 (ICC)</option>
-                            <option>OPS-GTW報關部 - B2C (ICC)</option>
-                        </select>
-                    </div>
-                    <div class="md:col-span-1">
-                        <label class="block text-sm font-bold text-gray-700 mb-1">聯絡人/主管職編</label>
-                        <input type="text" id="userStaffId" placeholder="請輸入職編" class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
-                    </div>
-                    <div class="md:col-span-1">
-                        <label class="block text-sm font-bold text-gray-700 mb-1">預約拍攝人數</label>
-                        <select id="personCount" class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white">
-                            <option value="1">1 人</option><option value="2">2 人</option><option value="3">3 人</option>
-                            <option value="4">4 人</option><option value="5">5 人</option><option value="6">6 人</option>
-                            <option value="7">7 人</option><option value="8">8 人</option><option value="9">9 人</option>
-                            <option value="10">10 人</option>
-                        </select>
-                    </div>
-                </div>
-                <p class="text-xs text-blue-600 mt-3 italic font-medium">※ 請先填寫上方資訊，再點選下方時段區塊即可完成預約。</p>
-            </div>
-
-            <!-- 日期導航 -->
-            <div id="dateTabs" class="flex flex-wrap gap-2 mb-6 border-b pb-4 overflow-x-auto"></div>
-
-            <!-- 時段列表 -->
-            <div id="timeSlots" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
-        </div>
-
-        <!-- 管理功能 -->
-        <div class="p-6 bg-gray-50 border-t flex flex-col md:flex-row justify-between items-center gap-4">
-            <div class="text-center md:text-left">
-                <p class="text-xs text-green-600 font-bold">● 雲端連線狀態：<span id="connStatus">確認中...</span></p>
-                <p class="text-[10px] text-gray-400">目前雲端總預約人次：<span id="totalStats">0</span></p>
-            </div>
-            <div class="flex flex-wrap gap-2 w-full md:w-auto">
-                <button onclick="clearAllData()" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition flex-1 md:flex-none">
-                    🗑️ 清空所有預約 (測試用)
-                </button>
-                <button onclick="exportData()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md transition flex-1 md:flex-none">
-                    📥 匯出完整預約名單 (CSV)
-                </button>
-            </div>
-        </div>
+  <div class="card">
+    <div class="card-title">選擇時段與人數</div>
+    <div class="period-label">上午場次</div>
+    <div class="slots-list" id="slots-am">
+      <div class="skeleton"></div><div class="skeleton"></div>
+      <div class="skeleton"></div><div class="skeleton"></div>
     </div>
-
-    <!-- 摘要確認/訊息彈窗 -->
-    <div id="modal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center p-4 z-50">
-        <div class="bg-white p-6 rounded-2xl max-w-sm w-full shadow-2xl">
-            <div id="modalIcon" class="text-5xl mb-3 text-center">✅</div>
-            <h3 id="modalTitle" class="text-xl font-bold mb-2 text-center">訊息</h3>
-            <div id="modalContent" class="text-gray-600 mb-6 space-y-2">
-                <p id="modalMsg" class="text-center whitespace-pre-line"></p>
-            </div>
-            <div id="modalActions" class="flex gap-3">
-                <button id="modalSecondaryBtn" onclick="closeModal()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-bold transition hidden">取消</button>
-                <button id="modalBtn" onclick="closeModal()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition shadow-lg text-center">確定</button>
-            </div>
-        </div>
+    <div class="period-label" style="margin-top:16px">下午場次</div>
+    <div class="slots-list" id="slots-pm">
+      <div class="skeleton"></div><div class="skeleton"></div>
+      <div class="skeleton"></div><div class="skeleton"></div>
     </div>
+  </div>
 
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, doc, onSnapshot, collection, query, addDoc, deleteDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+  <button class="submit-btn" id="submit-btn" disabled onclick="openConfirm()">確認預約 →</button>
+  <p class="footnote">資料由 Firebase 即時同步・所有人看到相同的預約狀況</p>
+</main>
 
-        // --- Firebase Config: 請在此處替換為您的專案設定 ---
-        const firebaseConfig = {
-            apiKey: "您的_API_KEY",
-            authDomain: "您的_PROJECT_ID.firebaseapp.com",
-            projectId: "您的_PROJECT_ID",
-            storageBucket: "您的_PROJECT_ID.firebasestorage.app",
-            messagingSenderId: "您的_SENDER_ID",
-            appId: "您的_APP_ID",
-            measurementId: "您的_MEASUREMENT_ID"
-        };
+<!-- Confirm Modal -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal">
+    <div class="modal-title">確認預約內容</div>
+    <div id="confirm-summary"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('confirm-modal')">返回修改</button>
+      <button class="btn-confirm" id="confirm-btn" onclick="confirmBooking()">確認送出</button>
+    </div>
+  </div>
+</div>
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        
-        // appId 用於 Firestore 路径規劃，建議保持原樣或自定義
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'id-card-booking-v1';
+<!-- Report Modal -->
+<div class="modal-overlay" id="report-modal">
+  <div class="modal report-modal">
+    <div class="modal-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <span>預約報表</span>
+      <div style="display:flex;gap:8px">
+        <button class="btn-export" onclick="exportCSV()">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><path d="M8 2v9M4 7l4 4 4-4M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          匯出 CSV
+        </button>
+        <button class="btn-cancel" style="flex:none;padding:7px 14px" onclick="closeModal('report-modal')">關閉</button>
+      </div>
+    </div>
+    <div class="report-body">
+      <div class="report-stats" id="report-stats"></div>
+      <div class="card-title" style="margin-bottom:0">各時段狀況</div>
+      <table class="report-table">
+        <thead><tr><th>時段</th><th>場次</th><th>預約人數</th><th>剩餘名額</th><th>狀態</th></tr></thead>
+        <tbody id="report-tbody"></tbody>
+      </table>
+      <div style="margin-top:22px">
+        <div class="card-title" style="margin-bottom:0">預約明細</div>
+        <table class="report-table">
+          <thead><tr><th>部門</th><th>職編</th><th>預約時段</th><th>人數</th><th>預約時間</th></tr></thead>
+          <tbody id="report-detail-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
 
-        const MAX_CAPACITY = 10;
-        
-        // --- 預約日期設定 ---
-        const activeDates = [
-            '05-19', '05-20', '05-21',
-            '05-26', '05-27', '05-28'
-        ];
-        
-        let allBookings = [];
-        let selectedDate = activeDates[0];
-        let currentUser = null;
+<div class="toast" id="toast"></div>
 
-        // 初始化身份驗證 (遵循 Canvas 規範：優先嘗試 Token，否則使用匿名登入)
-        async function initAuth() {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Auth Error:", error);
-                showInfoModal('連線失敗', '請確認 Firebase 控制台已啟用「匿名驗證」功能。', '❌');
-            }
-        }
+<!-- Firebase SDKs -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import {
+  getFirestore, doc, collection,
+  onSnapshot, runTransaction, getDocs, serverTimestamp, query, orderBy
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                document.getElementById('connStatus').innerText = '已連線 (雲端同步中)';
-                startListening();
-            } else {
-                document.getElementById('connStatus').innerText = '嘗試連線中...';
-            }
-        });
+// ── Firebase init ────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyCjcVEG4GXGkqPl-pjXrkzsm69A11eXXpE",
+  authDomain: "mybooking-7fa2e.firebaseapp.com",
+  projectId: "mybooking-7fa2e",
+  storageBucket: "mybooking-7fa2e.firebasestorage.app",
+  messagingSenderId: "1018514518020",
+  appId: "1:1018514518020:web:176339c3b90097efb10551",
+  measurementId: "G-05KFQVLLQ0"
+};
 
-        // 監聽雲端資料 (遵循路徑規範)
-        function startListening() {
-            if (!currentUser) return;
-            // 關鍵路徑：/artifacts/{appId}/public/data/bookings
-            const bookingsCol = collection(db, 'artifacts', appId, 'public', 'data', 'bookings');
-            const q = query(bookingsCol);
-            
-            onSnapshot(q, (snapshot) => {
-                allBookings = [];
-                snapshot.forEach(doc => {
-                    allBookings.push({ id: doc.id, ...doc.data() });
-                });
-                document.getElementById('loading').style.display = 'none';
-                initDateTabs();
-                renderTimeSlots();
-            }, (error) => {
-                console.error("Firestore Error:", error);
-                showInfoModal('資料讀取失敗', '請確認 Firestore 規則是否已設為允許讀寫。', '❌');
-            });
-        }
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
 
-        window.clearAllData = async function() {
-            if (allBookings.length === 0) {
-                showInfoModal('提示', '目前資料庫已經是空的。', 'ℹ️');
-                return;
-            }
+// ── Config ────────────────────────────────────────────────────────────────────
+const MAX = 10;
+const SLOTS = [
+  { id: 'am1', label: '10:00 – 10:30', period: 'am' },
+  { id: 'am2', label: '10:30 – 11:00', period: 'am' },
+  { id: 'am3', label: '11:00 – 11:30', period: 'am' },
+  { id: 'am4', label: '11:30 – 12:00', period: 'am' },
+  { id: 'pm1', label: '14:00 – 14:30', period: 'pm' },
+  { id: 'pm2', label: '14:30 – 15:00', period: 'pm' },
+  { id: 'pm3', label: '15:00 – 15:30', period: 'pm' },
+  { id: 'pm4', label: '15:30 – 16:00', period: 'pm' },
+];
 
-            showConfirmModal({
-                title: '⚠️ 警告：危險操作',
-                content: `<p class="text-red-600 font-bold text-center">您確定要刪除「所有」預約紀錄嗎？</p>`,
-                icon: '🗑️',
-                onConfirm: async () => {
-                    document.getElementById('loading').style.display = 'flex';
-                    try {
-                        const bookingsCol = collection(db, 'artifacts', appId, 'public', 'data', 'bookings');
-                        const snapshot = await getDocs(bookingsCol);
-                        const deletePromises = snapshot.docs.map(docSnap => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'bookings', docSnap.id)));
-                        await Promise.all(deletePromises);
-                        showInfoModal('已清空', '所有雲端預約紀錄已成功刪除。', '✅');
-                    } catch (error) {
-                        console.error("Clear Error:", error);
-                        showInfoModal('清除失敗', '無法刪除資料。', '❌');
-                    } finally {
-                        document.getElementById('loading').style.display = 'none';
-                    }
-                }
-            });
-        };
+// ── State ─────────────────────────────────────────────────────────────────────
+let bookings = {};   // { slotId: count }
+let records  = [];   // booking detail records
+let pendingSlot = null;
 
-        window.handleBooking = function(slotID, timeRange, remaining) {
-            const dept = document.getElementById('dept').value;
-            const staffId = document.getElementById('userStaffId').value.trim();
-            const requestedCount = parseInt(document.getElementById('personCount').value);
+// ── Firestore refs ────────────────────────────────────────────────────────────
+const slotsRef   = doc(db, 'booking', 'slots');
+const recordsRef = collection(db, 'booking_records');
 
-            if (!dept || !staffId) {
-                showInfoModal('⚠️ 資料不全', '請先選擇部門並填寫聯絡人職編。', '🏢');
-                return;
-            }
-            if (requestedCount > remaining) {
-                showInfoModal('⚠️ 名額不足', `此時段僅剩 ${remaining} 個名緣。`, '❌');
-                return;
-            }
+// ── Real-time listener: slots ─────────────────────────────────────────────────
+onSnapshot(slotsRef, snap => {
+  bookings = snap.exists() ? (snap.data() || {}) : {};
+  SLOTS.forEach(s => { if (bookings[s.id] == null) bookings[s.id] = 0; });
+  render();
+  setSyncOk();
+}, err => {
+  console.error(err);
+  setSyncError();
+});
 
-            showConfirmModal({
-                title: '確認預約內容',
-                content: `
-                    <div class="bg-blue-50 p-4 rounded-lg text-left text-sm border border-blue-100">
-                        <p><strong>📅 預約日期：</strong>${selectedDate}</p>
-                        <p><strong>⏰ 預約時段：</strong>${timeRange}</p>
-                        <p><strong>🏢 預約部門：</strong>${dept}</p>
-                        <p><strong>🆔 聯絡職編：</strong>${staffId}</p>
-                        <p class="text-blue-600 font-bold text-lg mt-2"><strong>👥 預約人數：</strong>${requestedCount} 人</p>
-                    </div>
-                `,
-                icon: '📝',
-                onConfirm: () => submitBooking(slotID, timeRange, dept, staffId, requestedCount)
-            });
-        };
+// ── Real-time listener: records ───────────────────────────────────────────────
+onSnapshot(query(recordsRef, orderBy('ts', 'desc')), snap => {
+  records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}, err => console.error(err));
 
-        async function submitBooking(slotID, timeRange, dept, staffId, requestedCount) {
-            document.getElementById('loading').style.display = 'flex';
-            try {
-                const bookingsCol = collection(db, 'artifacts', appId, 'public', 'data', 'bookings');
-                const promises = [];
-                for(let i = 0; i < requestedCount; i++) {
-                    promises.push(addDoc(bookingsCol, {
-                        slotID,
-                        timeRange,
-                        dept,
-                        staffId: staffId, 
-                        managerId: staffId,
-                        createdAt: serverTimestamp(),
-                        userId: currentUser.uid
-                    }));
-                }
-                await Promise.all(promises);
-                showInfoModal('預約成功', `已完成預約！`, '✅');
-            } catch (error) {
-                console.error("Write Error:", error);
-                showInfoModal('預約失敗', '無法寫入資料。', '❌');
-            } finally {
-                document.getElementById('loading').style.display = 'none';
-            }
-        }
+// ── Sync bar ──────────────────────────────────────────────────────────────────
+function setSyncOk() {
+  const dot = document.getElementById('sync-dot');
+  dot.className = 'sync-dot';
+  const now = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+  document.getElementById('sync-label').textContent = `Firebase 即時同步・上次更新：${now}`;
+}
+function setSyncError() {
+  document.getElementById('sync-dot').className = 'sync-dot error';
+  document.getElementById('sync-label').textContent = '連線失敗，請重新整理頁面';
+}
 
-        window.closeModal = () => document.getElementById('modal').classList.add('hidden');
+// ── Render slots ──────────────────────────────────────────────────────────────
+function render() {
+  ['am', 'pm'].forEach(period => {
+    const container = document.getElementById('slots-' + period);
+    container.innerHTML = '';
+    SLOTS.filter(s => s.period === period).forEach(slot => {
+      const booked = bookings[slot.id] || 0;
+      const isFull = booked >= MAX;
+      const avail  = MAX - booked;
+      const pct    = Math.round(booked / MAX * 100);
+      const isSelected = pendingSlot === slot.id;
+      const barClass = pct >= 100 ? 'full' : pct >= 70 ? 'nearly' : '';
 
-        function showInfoModal(title, msg, icon) {
-            const modal = document.getElementById('modal');
-            document.getElementById('modalTitle').innerText = title;
-            document.getElementById('modalMsg').innerText = msg;
-            document.getElementById('modalMsg').classList.remove('hidden');
-            document.getElementById('modalIcon').innerText = icon;
-            document.getElementById('modalSecondaryBtn').classList.add('hidden');
-            const customContent = document.getElementById('modalCustomContent');
-            if(customContent) customContent.remove();
-            const btn = document.getElementById('modalBtn');
-            btn.innerText = '確定';
-            btn.onclick = closeModal;
-            modal.classList.remove('hidden');
-        }
+      let selectHtml = '';
+      if (!isFull) {
+        const maxOpts = Math.min(avail, 10);
+        selectHtml = `<select class="count-select" id="cnt-${slot.id}" onclick="event.stopPropagation()" onchange="window._onCountChange('${slot.id}')">`;
+        for (let i = 1; i <= maxOpts; i++) selectHtml += `<option value="${i}">+${i} 人</option>`;
+        selectHtml += '</select>';
+      }
 
-        function showConfirmModal({title, content, icon, onConfirm}) {
-            const modal = document.getElementById('modal');
-            document.getElementById('modalTitle').innerText = title;
-            document.getElementById('modalMsg').classList.add('hidden');
-            document.getElementById('modalIcon').innerText = icon;
-            const contentArea = document.getElementById('modalContent');
-            const oldCustom = document.getElementById('modalCustomContent');
-            if(oldCustom) oldCustom.remove();
-            const div = document.createElement('div');
-            div.id = 'modalCustomContent';
-            div.innerHTML = content;
-            contentArea.appendChild(div);
-            document.getElementById('modalSecondaryBtn').classList.remove('hidden');
-            const confirmBtn = document.getElementById('modalBtn');
-            confirmBtn.innerText = '確認送出';
-            confirmBtn.onclick = () => { closeModal(); onConfirm(); };
-            modal.classList.remove('hidden');
-        }
+      const item = document.createElement('div');
+      item.className = 'slot-item' + (isFull ? ' slot-full' : '') + (isSelected ? ' slot-selected' : '');
+      item.innerHTML = `
+        <div class="slot-time">${slot.label}</div>
+        <div class="slot-progress-wrap">
+          <div class="slot-progress-track">
+            <div class="slot-progress-fill ${barClass}" style="width:${pct}%"></div>
+          </div>
+          <div class="slot-info">${booked} / ${MAX} 人已預約</div>
+        </div>
+        <div class="slot-right">
+          ${isFull ? '<span class="slot-full-badge">已額滿</span>' : selectHtml}
+        </div>`;
+      if (!isFull) {
+        item.addEventListener('click', () => { pendingSlot = slot.id; render(); });
+      }
+      container.appendChild(item);
+    });
+  });
+  updateSubmitBtn();
+}
 
-        function initDateTabs() {
-            const tabs = document.getElementById('dateTabs');
-            if (tabs.children.length > 0) return; 
-            
-            activeDates.forEach(dateStr => {
-                const [m, d] = dateStr.split('-').map(Number);
-                const dateObj = new Date(2026, m-1, d);
-                const dayOfWeek = dateObj.getDay();
-                
-                const btn = document.createElement('button');
-                btn.className = `date-btn px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all`;
-                btn.innerText = `${dateStr} (${['日','一','二','三','四','五','六'][dayOfWeek]})`;
-                btn.id = `btn-${dateStr}`;
-                btn.onclick = () => { selectedDate = dateStr; updateDateTabUI(); renderTimeSlots(); };
-                tabs.appendChild(btn);
-            });
-            updateDateTabUI();
-        }
+window._onCountChange = id => { pendingSlot = id; render(); };
 
-        function updateDateTabUI() {
-            document.querySelectorAll('.date-btn').forEach(btn => {
-                btn.className = btn.id === `btn-${selectedDate}` 
-                    ? "date-btn px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap bg-blue-600 text-white shadow-md"
-                    : "date-btn px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap bg-gray-200 text-gray-700 hover:bg-gray-300";
-            });
-        }
+function updateSubmitBtn() {
+  const dept = document.getElementById('dept').value;
+  const eid  = document.getElementById('emp-id').value.trim();
+  document.getElementById('submit-btn').disabled = !dept || !eid || !pendingSlot;
+}
+document.getElementById('dept').addEventListener('change', updateSubmitBtn);
+document.getElementById('emp-id').addEventListener('input', updateSubmitBtn);
 
-        function renderTimeSlots() {
-            const container = document.getElementById('timeSlots');
-            container.innerHTML = '';
-            const timeConfigs = [{s:10,e:11}, {s:14,e:15}];
-            timeConfigs.forEach(config => {
-                for (let hour = config.s; hour < config.e; hour++) {
-                    for (let min = 0; min < 60; min += 20) {
-                        const startStr = `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
-                        let endH = hour, endM = min + 20;
-                        if (endM === 60) { endH++; endM = 0; }
-                        const timeRange = `${startStr} - ${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}`;
-                        const slotID = `${selectedDate}_${startStr}`;
-                        const slotBookings = allBookings.filter(b => b.slotID === slotID);
-                        const count = slotBookings.length;
-                        const remaining = MAX_CAPACITY - count;
-                        const isFull = count >= MAX_CAPACITY;
-                        const div = document.createElement('div');
-                        div.className = `slot-card p-4 border-2 rounded-xl cursor-pointer ${isFull ? 'disabled' : 'bg-white border-gray-100 shadow-sm border-l-4 border-l-blue-400'}`;
-                        div.innerHTML = `
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-md font-bold text-gray-800">${timeRange}</span>
-                                <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${isFull ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}">
-                                    ${isFull ? '已滿額' : `餘 ${remaining} 名`}
-                                </span>
-                            </div>
-                            <div class="flex items-end justify-between">
-                                <div class="w-2/3 bg-gray-100 rounded-full h-2 mr-2"><div class="bg-blue-600 h-2 rounded-full transition-all duration-500" style="width: ${(count/MAX_CAPACITY)*100}%"></div></div>
-                                <span class="text-xs text-gray-500 font-medium">${count}/${MAX_CAPACITY}</span>
-                            </div>
-                        `;
-                        if (!isFull) div.onclick = () => window.handleBooking(slotID, timeRange, remaining);
-                        container.appendChild(div);
-                    }
-                }
-            });
-            document.getElementById('totalStats').innerText = allBookings.length;
-        }
+// ── Confirm ───────────────────────────────────────────────────────────────────
+window.openConfirm = () => {
+  const dept = document.getElementById('dept').value;
+  const eid  = document.getElementById('emp-id').value.trim();
+  if (!dept || !eid || !pendingSlot) return;
+  const slot  = SLOTS.find(s => s.id === pendingSlot);
+  const cntEl = document.getElementById('cnt-' + pendingSlot);
+  const count = cntEl ? parseInt(cntEl.value) : 1;
+  const avail = MAX - (bookings[pendingSlot] || 0);
+  if (count > avail) { showToast('此時段剩餘名額不足，請重新選擇'); return; }
 
-        window.exportData = function() {
-            if (allBookings.length === 0) { showInfoModal('提示', '目前尚無預約資料。', 'ℹ️'); return; }
-            let csvContent = "\uFEFF拍攝日期,拍攝時段,部門,預約人職編,系統操作預約時間\n";
-            const sortedBookings = [...allBookings].sort((a,b) => a.slotID.localeCompare(b.slotID));
-            sortedBookings.forEach(b => {
-                let createdTimeStr = "未知";
-                if (b.createdAt && b.createdAt.seconds) {
-                    const date = new Date(b.createdAt.seconds * 1000);
-                    createdTimeStr = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
-                }
-                csvContent += `${b.slotID.split('_')[0]},${b.timeRange},"${b.dept}","${b.managerId || ''}",${createdTimeStr}\n`;
-            });
-            const link = document.createElement("a");
-            const dateNow = new Date();
-            const dateStr = `${String(dateNow.getMonth() + 1).padStart(2, '0')}${String(dateNow.getDate()).padStart(2, '0')}`;
-            link.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
-            link.download = `預約清單_${dateStr}.csv`;
-            link.click();
-        };
+  document.getElementById('confirm-summary').innerHTML = `
+    <div class="modal-row"><span class="modal-row-label">部門</span><span class="modal-row-val">${dept}</span></div>
+    <div class="modal-row"><span class="modal-row-label">填寫人職編</span><span class="modal-row-val">${eid}</span></div>
+    <div class="modal-row"><span class="modal-row-label">預約時段</span><span class="modal-row-val">${slot.label}</span></div>
+    <div class="modal-highlight">共 ${count} 人・預約時段：${slot.label}</div>
+    <div class="modal-row"><span class="modal-row-label">目前剩餘名額</span><span class="modal-row-val">${avail} 人</span></div>`;
+  openModal('confirm-modal');
+};
 
-        initAuth();
-    </script>
+window.confirmBooking = async () => {
+  const btn = document.getElementById('confirm-btn');
+  btn.disabled = true; btn.textContent = '送出中…';
+
+  const dept   = document.getElementById('dept').value;
+  const eid    = document.getElementById('emp-id').value.trim();
+  const slot   = SLOTS.find(s => s.id === pendingSlot);
+  const cntEl  = document.getElementById('cnt-' + pendingSlot);
+  const count  = cntEl ? parseInt(cntEl.value) : 1;
+
+  try {
+    // Firestore transaction — atomic read + write prevents double booking
+    await runTransaction(db, async tx => {
+      const snap    = await tx.get(slotsRef);
+      const current = snap.exists() ? (snap.data()[pendingSlot] || 0) : 0;
+      if (current + count > MAX) throw new Error('FULL');
+      const update  = snap.exists() ? { [pendingSlot]: current + count } : {};
+      SLOTS.forEach(s => { if (update[s.id] == null) update[s.id] = bookings[s.id] || 0; });
+      update[pendingSlot] = current + count;
+      tx.set(slotsRef, update);
+    });
+
+    // Write detail record
+    const { addDoc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+    await addDoc(recordsRef, {
+      dept, empId: eid,
+      slotId: pendingSlot, slotLabel: slot.label,
+      period: slot.period === 'am' ? '上午' : '下午',
+      count, ts: serverTimestamp()
+    });
+
+    closeModal('confirm-modal');
+    pendingSlot = null;
+    showToast('預約成功！');
+  } catch (e) {
+    if (e.message === 'FULL') showToast('此時段名額剛被搶先，請重新選擇');
+    else { console.error(e); showToast('發生錯誤，請稍後再試'); }
+    closeModal('confirm-modal');
+  }
+  btn.disabled = false; btn.textContent = '確認送出';
+};
+
+// ── Report ────────────────────────────────────────────────────────────────────
+window.openReport = () => {
+  const totalBooked = SLOTS.reduce((a, s) => a + (bookings[s.id] || 0), 0);
+  const fullSlots   = SLOTS.filter(s => (bookings[s.id] || 0) >= MAX).length;
+  const deptSet     = new Set(records.map(r => r.dept)).size;
+
+  document.getElementById('report-stats').innerHTML = `
+    <div class="stat-card"><div class="stat-num">${totalBooked}</div><div class="stat-label">總預約人數</div></div>
+    <div class="stat-card"><div class="stat-num">${fullSlots}</div><div class="stat-label">已額滿時段</div></div>
+    <div class="stat-card"><div class="stat-num">${deptSet}</div><div class="stat-label">已預約部門數</div></div>`;
+
+  const tbody = document.getElementById('report-tbody');
+  tbody.innerHTML = '';
+  SLOTS.forEach(s => {
+    const booked = bookings[s.id] || 0;
+    const avail  = MAX - booked;
+    const pct    = Math.round(booked / MAX * 100);
+    const barClass = pct >= 100 ? 'full' : pct >= 70 ? 'nearly' : '';
+    const statusHtml = pct >= 100
+      ? '<span style="color:var(--red);font-weight:500">已額滿</span>'
+      : pct >= 70
+        ? '<span style="color:var(--amber);font-weight:500">即將額滿</span>'
+        : '<span style="color:var(--green);font-weight:500">可預約</span>';
+    tbody.innerHTML += `<tr>
+      <td>${s.label}</td>
+      <td>${s.period === 'am' ? '上午' : '下午'}</td>
+      <td><span class="pct-bar"><span class="pct-bar-fill ${barClass}" style="width:${pct}%"></span></span>${booked} / ${MAX}</td>
+      <td>${avail}</td>
+      <td>${statusHtml}</td></tr>`;
+  });
+
+  const dtbody = document.getElementById('report-detail-tbody');
+  dtbody.innerHTML = records.length === 0
+    ? '<tr><td colspan="5" style="text-align:center;color:var(--text-hint);padding:18px">目前尚無預約記錄</td></tr>'
+    : records.map(r => {
+        const tsStr = r.ts?.toDate
+          ? r.ts.toDate().toLocaleString('zh-TW', { hour12: false })
+          : '—';
+        return `<tr>
+          <td>${r.dept}</td>
+          <td style="font-family:'DM Mono',monospace;font-size:12px">${r.empId}</td>
+          <td>${r.slotLabel}</td>
+          <td style="font-weight:500">${r.count} 人</td>
+          <td style="color:var(--text-secondary);font-size:12px">${tsStr}</td></tr>`;
+      }).join('');
+
+  openModal('report-modal');
+};
+
+window.exportCSV = () => {
+  let csv = '\uFEFF部門,職編,預約時段,場次,人數,預約時間\n';
+  if (records.length === 0) {
+    csv += '（目前尚無預約記錄）\n';
+  } else {
+    records.forEach(r => {
+      const tsStr = r.ts?.toDate
+        ? r.ts.toDate().toLocaleString('zh-TW', { hour12: false })
+        : '';
+      csv += `${r.dept},${r.empId},${r.slotLabel},${r.period},${r.count},${tsStr}\n`;
+    });
+  }
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '拍照預約報表_' + new Date().toLocaleDateString('zh-TW').replace(/\//g, '-') + '.csv';
+  a.click();
+  showToast('CSV 已下載');
+};
+
+// ── Modal helpers ─────────────────────────────────────────────────────────────
+window.openModal  = id => document.getElementById(id).classList.add('open');
+window.closeModal = id => document.getElementById(id).classList.remove('open');
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); });
+});
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+window.showToast = msg => {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+};
+</script>
 </body>
 </html>
