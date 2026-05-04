@@ -374,7 +374,7 @@ function render() {
       let selectHtml = '';
       if (!isFull) {
         const maxOpts = Math.min(avail, 10);
-        selectHtml = `<select class="count-select" id="cnt-${slot.id}" onclick="event.stopPropagation()" onchange="window._onCountChange('${slot.id}')">`;
+        selectHtml = `<select class="count-select" id="cnt-${slot.id}">`;
         for (let i = 1; i <= maxOpts; i++) selectHtml += `<option value="${i}">+${i} 人</option>`;
         selectHtml += '</select>';
       }
@@ -393,7 +393,20 @@ function render() {
           ${isFull ? '<span class="slot-full-badge">已額滿</span>' : selectHtml}
         </div>`;
       if (!isFull) {
+        // Click on card selects the slot
         item.addEventListener('click', () => { pendingSlot = slot.id; render(); });
+        // Attach select listeners after innerHTML is set
+        const sel = item.querySelector(`#cnt-${slot.id}`);
+        if (sel) {
+          // Stop card click from firing when interacting with select
+          sel.addEventListener('mousedown', e => e.stopPropagation());
+          sel.addEventListener('click',     e => e.stopPropagation());
+          sel.addEventListener('change', e => {
+            e.stopPropagation();
+            pendingSlot = slot.id;
+            render();
+          });
+        }
       }
       container.appendChild(item);
     });
@@ -401,7 +414,6 @@ function render() {
   updateSubmitBtn();
 }
 
-window._onCountChange = id => { pendingSlot = id; render(); };
 
 function updateSubmitBtn() {
   const dept = document.getElementById('dept').value;
